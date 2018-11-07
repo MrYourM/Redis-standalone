@@ -1,0 +1,7 @@
+[template]
+src = "keepalived.conf.tmpl"
+dest = "/etc/keepalived/keepalived.copy.conf"
+keys = [
+    "/",
+]
+
