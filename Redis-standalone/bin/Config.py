@@ -1,19 +1,12 @@
 #!/usr/bin/python
-#coding=utf-8
+# _*_coding: utf-8 _*_
 import commands
 import os
 import json
 import urllib2
 import logging.handlers
-import subprocess
-import time
-import sys
-import signal
-import errno
-import datetime
-import shutil
-import hashlib
 import Constants
+
 
 class Config:
     def __init__(self, config_file_path):
@@ -32,58 +25,58 @@ class Config:
         self.master_node_id = None
 
         self.__parse_config()
-    
+
     def json(self):
-        return {'config_file_path': self.config_file_path,\
-                'enable_commands' : self.enable_commands,\
-                'requirepass' : self.requirepass,\
-                'password' : self.password,\
-                'master_ip' : self.master_ip,\
-                'self_ip' : self.node.get_ip(), \
-                'is_master' : self.is_master(), \
-                'master_port' : self.master_port}
+        return {'config_file_path': self.config_file_path, \
+                'enable_commands': self.enable_commands, \
+                'requirepass': self.requirepass, \
+                'password': self.password, \
+                'master_ip': self.master_ip, \
+                'self_ip': self.node.get_ip(), \
+                'is_master': self.is_master(), \
+                'master_port': self.master_port}
 
     def refresh(self):
         ip, port = self.__get_master(update=True)
         self.master_ip = ip
         self.master_port = port
-        self.logger.info("After refresh %s %s" %(self.master_ip, self.master_port))
+        self.logger.info("After refresh %s %s" % (self.master_ip, self.master_port))
 
     def get_hosts_count(self, update=False):
         return len(self.__get_hosts(refresh=update))
-    
+
     def get_node_memory(self):
         return int(self.node.get_memory())
-    
+
     def is_requirepass(self):
         return self.requirepass
-    
+
     def get_password(self):
         return self.password
-    
+
     def is_master(self, exclude=False):
         if exclude:
             self.refresh()
         return self.node.get_ip() == self.master_ip
-    
+
     def get_master_ip(self):
         return self.master_ip
-    
+
     def get_master_port(self):
         return self.master_port
-    
+
     def get_node_id(self):
         return self.master_node_id
-    
+
     def get_node_ip(self):
         return self.node.get_ip()
-    
+
     def will_be_deleted(self):
         response = self.__get_request("http://metadata/self/deleting-hosts")
         if ('code' in response and response['code'] == 404) or self.node.node_id not in response:
             return False
         return True
-    
+
     def get_hosts_passphrase(self):
         hosts = self.__get_hosts()
 
@@ -92,7 +85,7 @@ class Config:
             passphrase = self.__get_request("http://metadata/self/hosts/node/%s/pub_key" % host['instance_id'])
             if passphrase.startswith("ssh-rsa"):
                 passphrases.append(passphrase)
-        
+
         return passphrases
 
     def __parse_config(self):
@@ -118,12 +111,11 @@ class Config:
                         break
                     else:
                         self.enable_commands.append(command)
-            
+
             elif line.startswith("maxmemory_portion"):
                 items = line.strip().split(' ')
                 if len(items) == 2:
-                     self.maxmemory_portion = float(items[1]) / 100
-
+                    self.maxmemory_portion = float(items[1]) / 100
 
     def __get_master(self, update=False):
         """
@@ -179,7 +171,7 @@ class Config:
         if len(hosts) > 0:
             master_ip = hosts[0]['ip']
             master_node_id = hosts[0]['node_id']
-         # 3、获取MASTER_FILE中的ip ,用于重启的redis服务时对master_ip的读取
+        # 3、获取MASTER_FILE中的ip ,用于重启的redis服务时对master_ip的读取
         if os.path.isfile(Constants.MASTER_FILE):
             fd = open(Constants.MASTER_FILE, "r")
             temp_ip, temp_port = fd.readline().split(' ')
@@ -191,31 +183,32 @@ class Config:
         if len(self.get_hosts()) == 2:
             if self.is_requirepass():
                 self_cmd = "/opt/redis/bin/redis-cli -a {} info replication".format(self.get_password())
-                peer_cmd = "/opt/redis/bin/redis-cli -a {} -h {} info replication".format(self.get_password(),self.get_peer_ip())
+                peer_cmd = "/opt/redis/bin/redis-cli -a {} -h {} info replication".format(self.get_password(),
+                                                                                          self.get_peer_ip())
             else:
                 self_cmd = "/opt/redis/bin/redis-cli info replication"
                 peer_cmd = "/opt/redis/bin/redis-cli -h {} info replication".format(self.get_peer_ip())
             cli_get_ip = None
-            cli_port  = None
-            status,output = commands.getstatusoutput(self_cmd)
+            cli_port = None
+            status, output = commands.getstatusoutput(self_cmd)
             if status == 0:
                 for info in output.split('\n'):
                     if info.strip().startswith('role'):
                         if info.strip().split(':')[1] == 'master':
-                            cli_get_ip,cli_port = self.get_node_ip(),self.node.get_port()
+                            cli_get_ip, cli_port = self.get_node_ip(), self.node.get_port()
                             break
                 master_ip, master_port = cli_get_ip, cli_port
-            if cli_get_ip == None and cli_port ==None:
-                status,output = commands.getstatusoutput(peer_cmd)
+            if cli_get_ip == None and cli_port == None:
+                status, output = commands.getstatusoutput(peer_cmd)
                 if status == 0:
                     for info in output.split('\n'):
                         if info.strip().startswith('role'):
                             if info.strip().split(':')[1] == 'master':
-                                cli_get_ip,cli_port = self.get_peer_ip(),self.node.get_port()
+                                cli_get_ip, cli_port = self.get_peer_ip(), self.node.get_port()
                                 break
                     master_ip, master_port = cli_get_ip, cli_port
         return master_ip, master_port
-    
+
     def get_vip(self):
         return self.__get_request("http://metadata/self/cluster/endpoints/reserved_ips/vip/value", json_format=False)
 
@@ -264,22 +257,25 @@ class Config:
                     peer_ip = host_info['ip']
                     break
             return peer_ip
-    
+
+    def is_first_node(self):
+        return self.get_node_ip() == self.get_hosts()[0]["ip"]
+
     def get_cluster_id(self):
         return self.__get_request("http://metadata/self/cluster/cluster_id", json_format=False)
-            
+
     def __get_request(self, url, json_format=True):
         format_headers = {}
         if json_format:
-            format_headers = {"Accept" : "application/json"}
+            format_headers = {"Accept": "application/json"}
 
         try:
-            request = urllib2.Request(url, headers = format_headers)
+            request = urllib2.Request(url, headers=format_headers)
             contents = urllib2.urlopen(request).read()
         except Exception, ex:
             self.logger.error("%s : %s" % (url, ex))
             if json_format:
-                return {"code" : 404, "message" : "Not found", "type" : "ERROR"}
+                return {"code": 404, "message": "Not found", "type": "ERROR"}
             else:
                 return "Not found"
 
@@ -287,12 +283,12 @@ class Config:
             return json.loads(contents)
         else:
             return contents
-    
+
     def __init_logger(self, logger_name, log_dir):
         if not os.path.isdir(log_dir):
             os.system("mkdir -p %s; chmod 755 %s" % (log_dir, log_dir))
         app_deploy_log = "%s/%s.log" % (log_dir, logger_name)
-        Rthandler = logging.handlers.RotatingFileHandler(app_deploy_log, maxBytes = 20 * 1024 * 1024, backupCount = 5)
+        Rthandler = logging.handlers.RotatingFileHandler(app_deploy_log, maxBytes=20 * 1024 * 1024, backupCount=5)
         formatter = logging.Formatter('%(asctime)s -%(thread)d- [%(levelname)s] %(message)s (%(filename)s:%(lineno)d)')
         Rthandler.setFormatter(formatter)
 
@@ -300,8 +296,8 @@ class Config:
         self.logger.addHandler(Rthandler)
         self.logger.setLevel(logging.INFO)
 
+
 class Node:
-    
     def __init__(self):
         self.ip = None
         self.memory = None
@@ -319,19 +315,20 @@ class Node:
         response = self.__get_request("http://metadata/self/env/port", json_format=False)
 
         self.port = response
-    
+
     def __get_request(self, url, json_format=True):
         format_headers = {}
         if json_format:
-            format_headers = {"Accept" : "application/json"}
+            format_headers = {"Accept": "application/json"}
 
         try:
-            request = urllib2.Request(url, headers = format_headers)
+            request = urllib2.Request(url, headers=format_headers)
             contents = urllib2.urlopen(request).read()
         except Exception, ex:
-            
+            print ex
+
             if json_format:
-                return {"code" : 404, "message" : "Not found", "type" : "ERROR"}
+                return {"code": 404, "message": "Not found", "type": "ERROR"}
             else:
                 return "Not found"
 
@@ -339,17 +336,15 @@ class Node:
             return json.loads(contents)
         else:
             return contents
-    
+
     def get_memory(self):
         return self.memory
-    
+
     def get_ip(self):
         return self.ip
-    
+
     def get_node_id(self):
         return self.node_id
 
     def get_port(self):
         return self.port
-
-
